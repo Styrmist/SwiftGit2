@@ -95,6 +95,8 @@ private func cloneOptions(bare: Bool = false, localClone: Bool = false, fetchOpt
 
 /// A git repository.
 public final class Repository {
+	/// Only used for running `git_libgit2_init()` exactly once.
+	private static var gitInit: Void = { git_libgit2_init(); return }()
 
 	// MARK: - Creating Repositories
 
@@ -104,6 +106,7 @@ public final class Repository {
 	///
 	/// Returns a `Result` with a `Repository` or an error.
 	public class func create(at url: URL) -> Result<Repository, NSError> {
+		_ = Self.gitInit
 		var pointer: OpaquePointer? = nil
 		let result = url.withUnsafeFileSystemRepresentation {
 			git_repository_init(&pointer, $0, 0)
@@ -123,6 +126,7 @@ public final class Repository {
 	///
 	/// Returns a `Result` with a `Repository` or an error.
 	public class func at(_ url: URL) -> Result<Repository, NSError> {
+		_ = Self.gitInit
 		var pointer: OpaquePointer? = nil
 		let result = url.withUnsafeFileSystemRepresentation {
 			git_repository_open(&pointer, $0)
@@ -150,6 +154,7 @@ public final class Repository {
 	public class func clone(from remoteURL: URL, to localURL: URL, localClone: Bool = false, bare: Bool = false,
 	                        credentials: Credentials = .default, checkoutStrategy: CheckoutStrategy = .Safe,
 	                        checkoutProgress: CheckoutProgressBlock? = nil) -> Result<Repository, NSError> {
+		_ = Self.gitInit
 		var options = cloneOptions(
 			bare: bare,
 			localClone: localClone,
@@ -589,8 +594,8 @@ public final class Repository {
 	/// Stage the file(s) under the specified path.
 	public func add(path: String) -> Result<(), NSError> {
 		var dirPointer = UnsafeMutablePointer<Int8>(mutating: (path as NSString).utf8String)
-		var paths = withUnsafeMutablePointer(to: &dirPointer) {
-			git_strarray(strings: $0, count: 1)
+		var paths = withExtendedLifetime(&dirPointer) { (s: UnsafeMutablePointer<UnsafeMutablePointer<Int8>?>) in
+			git_strarray(strings: s, count: 1)
 		}
 		return unsafeIndex().flatMap { index in
 			defer { git_index_free(index) }
